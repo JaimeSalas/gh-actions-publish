@@ -1,8 +1,8 @@
-# 03 Github branch
+# 02 Github actions
 
-In this example we are going to create a production server using Github pages.
+In this example we are going to create a production server using Github pages and Github actions.
 
-We will start from `02-azure-ftp`.
+We will start from `03-github-branch`.
 
 # Steps to build it
 
@@ -12,11 +12,9 @@ We will start from `02-azure-ftp`.
 npm install
 ```
 
-Using previous application, we upload it using [Github Pages](https://pages.github.com/). We only need to create a new `Public` repository.
+We will use same approach as `gh-pages` example, but we will use [Github Actions](https://docs.github.com/en/free-pro-team@latest/actions) for automatic deploys.
 
-> NOTE: In this case we won't use `express server` to serve front app, because Github Pages has its own server.
-
-Upload files:
+Create new repository and upload files:
 
 ```bash
 git init
@@ -26,108 +24,166 @@ git commit -m "initial commit"
 git push -u origin main
 ```
 
-Run build command:
+Install [gh-pages](https://github.com/tschaub/gh-pages) as dev dependency to deploy to Github pages:
 
 ```bash
-npm run build
+npm install gh-pages --save-dev
 ```
 
-Create a new branch called `gh-pages`.
+Add deploy command:
 
-Remove all files except `dist` folder. And move `dist` folder's files to root path. We should have on root path:
+_./package.json_
+
+```diff
+  "scripts": {
+    "start": "run-p -l type-check:watch start:dev",
+    "start:dev": "vite --port 8080",
+    "build": "npm run type-check && npm run clean && npm run build:prod",
+    "build:prod": "vite build",
++   "build:dev": "vite build --mode development",
++   "deploy": "gh-pages -d dist",
+    ...
+  },
+```
+
+Run dev build and deploy it:
+
+```bash
+npm run build:dev
+npm run deploy
+```
+
+> NOTE: We can run deploy because we have access to repository
+>
+> since we are logged in Github
+
+Add GitHub actions CD workflow:
+
+_./.github/workflows/cd.yml_
+
+```yml
+name: CD workflow
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  cd:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Deploy
+        run: npm run deploy
 
 ```
-|--assets/
-|--index.html
 
-```
-
-Upload files:
+Add commit with changes:
 
 ```bash
 git add .
-git commit -m "upload files"
-git push -u origin gh-pages
-```
-
-Now, we have deployed our website in: `https://<user-name>.github.io/<repository-name>`:
-
-![01-open-gh-pages-url](./readme-resources/01-open-gh-pages-url.png)
-
-> NOTE: We can change branch name on Settings tab > GitHub Pages section
-
-As we see, we have some errors when retrieving files:
-
-_https://<user-name>.github.io/assets/index-a824b72f.js net::ERR_ABORTED 404_
-
-This issue is related with the references to assets in the `index.html` file. We need to change the references to:
-
-```diff
-<!DOCTYPE html>
-
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <title>Cloud Module</title>
-
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
--   <script type="module" crossorigin src="/assets/index-a824b72f.js"></script>
--   <link rel="modulepreload" crossorigin href="/assets/vendor-13e230a0.js">
-+   <script type="module" crossorigin src="./assets/index-a824b72f.js"></script>
-+   <link rel="modulepreload" crossorigin href="./assets/vendor-13e230a0.js">
-  </head>
-  <body>
-    <div id="root"></div>
-
-  </body>
-</html>
-```
-
-> Due to Github Pages uses a subpath for the project, we need to add `./` to the references.
-
-Instead of doing manually, we will change the bunlder config. Checkout to main branch
-
-```bash
-git checkout main
-
-```
-
-Update config:
-
-_./vite.config.js_
-
-```diff
-import { defineConfig, splitVendorChunkPlugin } from 'vite';
-import react from '@vitejs/plugin-react';
-import path from 'path';
-
-export default defineConfig({
-+ base: './',
-  envPrefix: 'PUBLIC_',
-  ...
-```
-
-> [Vite Public base path](https://vitejs.dev/guide/build.html#public-base-path)
-
-Run build command:
-
-```bash
-npm install
-
-npm run build
-
-```
-
-Copy `dist` folder to `gh-pages` branch as above.
-
-Commit and push:
-
-```bash
-git add .
-git commit -m "upload files with base path"
+git commit -m "add continuos deployment"
 git push
+```
+
+As we saw, the workflow was failed. Why? Because each time a Github job is executed, it's a new and clean machine outside repository. That is, we need to allow job's git push. The best approach is creating a new ssh key on local:
+
+```bash
+ssh-keygen -m PEM -t rsa -C "cd-user@my-app.com"
+```
+```bash
+> Enter file in which to save the key (/c/Users/nasda/.ssh/id_rsa): `./id_rsa`
+> Enter passphrase (empty for no passphrase): `Pulse Enter for empty`
+> Enter same passphrase again: `Pulse Enter for empty`
+```
+
+> NOTES
+> -m PEM: Format to apply. PEM is a common public/private key certificate format.
+> rsa: RSA is the crypto algorithm.
+> Enter `./id_rsa` to save files in currect directory
+> You can leave empty the passphrasse field.
+
+Copy `id_rsa.pub` content to `Github Settings` > `Deploy keys` section:
+
+![01-public-ssh-key](./readme-resources/01-public-ssh-key.png)
+
+![02-public-ssh-key](./readme-resources/02-public-ssh-key.png)
+
+Delete `id_rsa.pub` file.
+
+Copy `id_rsa` content to `Github Settings` > `Secrets` section:
+
+![03-private-ssh-key](./readme-resources/03-private-ssh-key.png)
+
+![04-private-ssh-key](./readme-resources/04-private-ssh-key.png)
+
+Delete `id_rsa` file.
+
+Now, we can use this shh private key to do a commit/push in Github's job:
+
+_./.github/workflows/cd.yml_
+
+```diff
+name: CD workflow
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  cd:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
++     - name: Use SSH key
++       run: |
++         mkdir -p ~/.ssh/
++         echo "${{secrets.SSH_PRIVATE_KEY}}" > ~/.ssh/id_rsa
++         sudo chmod 600 ~/.ssh/id_rsa
+
++     - name: Git config
++       run: |
++         git config --global user.email "cd-user@my-app.com"
++         git config --global user.name "cd-user"
+
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Deploy
+-       run: npm run deploy
++       run: npm run deploy -- -r git@github.com:<your-repo>
 
 ```
+
+> NOTES:
+> "Use SSH key" step: create id_rsa with ssh private key in default ssh folder and add write permits.
+>
+> "Deploy" step: update deploy command with repository's SSH URL.
+>
+> [gh-pages -r flag](https://github.com/tschaub/gh-pages#optionsrepo)
+
+```bash
+git add .
+git commit -m "configure git cd-user permits"
+git push
+```
+
+![05-open-gh-pages-url](./readme-resources/05-open-gh-pages-url.png)
 
 # About Basefactor + Lemoncode
 
