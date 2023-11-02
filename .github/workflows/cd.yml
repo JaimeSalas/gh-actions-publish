@@ -12,16 +12,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Use SSH key
-        run: |
-          mkdir -p ~/.ssh/
-          echo "${{secrets.SSH_PRIVATE_KEY}}" > ~/.ssh/id_rsa
-          sudo chmod 600 ~/.ssh/id_rsa
+      # - name: Use SSH key
+      #   run: |
+      #     mkdir -p ~/.ssh/
+      #     echo "${{secrets.SSH_PRIVATE_KEY}}" > ~/.ssh/id_rsa
+      #     sudo chmod 600 ~/.ssh/id_rsa
 
-      - name: Git config
-        run: |
-          git config --global user.email "cd-user@my-app.com"
-          git config --global user.name "cd-user"
+      # - name: Git config
+      #   run: |
+      #     git config --global user.email "cd-user@my-app.com"
+      #     git config --global user.name "cd-user"
 
       - name: Install
         run: npm ci
@@ -29,5 +29,11 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Deploy
-        run: npm run deploy -- -r git@github.com:gh-actions-publish
+      # - name: Deploy
+      #   run: npm run deploy -- -r git@github.com:gh-actions-publish
+      - name: Deploy with gh-pages
+        run: |
+          git remote set-url origin https://git:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git
+          npm run deploy -- -u "github-actions-bot <support+actions@github.com>"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
