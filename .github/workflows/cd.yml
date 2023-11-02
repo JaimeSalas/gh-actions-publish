@@ -5,6 +5,10 @@ on:
     branches:
       - main
 
+permissions:
+  pages: write      # to deploy to Pages
+  id-token: write
+
 jobs:
   cd:
     runs-on: ubuntu-latest
